@@ -8,7 +8,7 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
   <style>
-    body{background:#f3f4f6;}
+    body{background:#f3f4f6;transition:background 0.2s,color 0.2s;}
     .brand-bar{background:#111827;color:#f9fafb;}
     .brand-logo{font-weight:700;letter-spacing:0.03em;}
     textarea{white-space:pre-wrap;font-family:"JetBrains Mono","Courier New",monospace;font-size:0.9rem;}
@@ -16,6 +16,20 @@
     .card{border-radius:0.75rem;border:1px solid #e5e7eb;}
     .card-header{background:#f9fafb;border-bottom:1px solid #e5e7eb;}
     .pill-label{font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;}
+
+    /* Dark mode */
+    body.dark-mode{background:#020617;color:#e5e7eb;}
+    body.dark-mode .brand-bar{background:#000000;color:#e5e7eb;}
+    body.dark-mode .card{background:#020617;border-color:#1f2937;}
+    body.dark-mode .card-header{background:#020617;border-bottom-color:#1f2937;}
+    body.dark-mode textarea,
+    body.dark-mode select{
+      background:#020617;
+      color:#e5e7eb;
+      border-color:#1f2937;
+    }
+    body.dark-mode .form-text,
+    body.dark-mode .text-muted{color:#9ca3af !important;}
   </style>
 </head>
 <body>
@@ -26,10 +40,11 @@
       <span class="brand-logo">LexDraft</span>
       <span class="d-none d-sm-inline text-secondary" style="font-size:0.8rem;">Adaptive document composer</span>
     </div>
-    <div class="mt-2 mt-md-0">
+    <div class="mt-2 mt-md-0 d-flex align-items-center">
       <span class="badge bg-secondary badge-tech">Flask backend</span>
       <span class="badge bg-info text-dark badge-tech">AI text analysis</span>
       <span class="badge bg-success badge-tech">Smart clause engine</span>
+      <button id="theme-toggle" class="btn btn-sm btn-outline-light ms-2">Dark</button>
     </div>
   </div>
 </nav>
@@ -57,7 +72,7 @@
             </select>
           </div>
 
-          <div class="mb-3">
+          <div class="mb-2">
             <label class="form-label fw-semibold">
               Use-case / Requirements
               <span class="badge bg-secondary badge-tech">Analysed by AI</span>
@@ -67,10 +82,19 @@
             <div class="form-text">
               Include details like parties, startup, remote work, interns, salary, locations, duration.
             </div>
+            <div id="char-count" class="small text-muted mt-1">0 characters</div>
           </div>
 
+          <!-- Mic button + status -->
+          <button id="mic-btn" type="button" class="btn btn-outline-secondary w-100 mb-2">
+            🎤 Speak instead of typing
+          </button>
+          <div id="mic-status" class="small text-muted mb-2"></div>
+
           <button id="generate-btn" class="btn btn-primary w-100 mb-2">Generate draft</button>
-          <button id="download-btn" class="btn btn-outline-secondary w-100">Download draft (PDF)</button>
+          <button id="download-btn" class="btn btn-outline-secondary w-100 mb-2">Download draft (PDF)</button>
+          <button id="copy-btn" class="btn btn-outline-dark w-100 mb-2">Copy draft</button>
+          <button id="reset-btn" class="btn btn-link w-100">Reset form</button>
 
           <div id="status-text" class="form-text mt-2"></div>
           <div id="ai-summary" class="small text-muted mt-1"></div>
@@ -93,7 +117,7 @@
         </div>
       </div>
 
-      <div class="card shadow-sm">
+      <div class="card shadow-sm" id="draft-card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span class="pill-label text-muted">Step 3 · Generated draft</span>
           <span class="text-muted" style="font-size:0.8rem;">Template clauses + adaptive clauses</span>
@@ -111,13 +135,65 @@
 <script>
   const btn = document.getElementById('generate-btn');
   const downloadBtn = document.getElementById('download-btn');
+  const copyBtn = document.getElementById('copy-btn');
+  const resetBtn = document.getElementById('reset-btn');
   const draftBox = document.getElementById('draft');
   const entitiesList = document.getElementById('entities-list');
   const statusText = document.getElementById('status-text');
   const aiSummary = document.getElementById('ai-summary');
+  const requirementsBox = document.getElementById('requirements');
+  const charCount = document.getElementById('char-count');
+  const themeToggle = document.getElementById('theme-toggle');
+  const draftCard = document.getElementById('draft-card');
+
+  // Load saved data (auto-save + theme)
+  window.addEventListener('DOMContentLoaded', () => {
+    const savedReq = localStorage.getItem('lexdraft_requirements');
+    const savedDraft = localStorage.getItem('lexdraft_draft');
+    const savedDocType = localStorage.getItem('lexdraft_docType');
+    const savedTheme = localStorage.getItem('lexdraft_theme');
+
+    if (savedReq) {
+      requirementsBox.value = savedReq;
+      charCount.textContent = savedReq.length + " characters";
+    }
+    if (savedDraft) {
+      draftBox.value = savedDraft;
+    }
+    if (savedDocType) {
+      document.getElementById('docType').value = savedDocType;
+    }
+    if (savedTheme === 'dark') {
+      document.body.classList.add('dark-mode');
+      themeToggle.textContent = "Light";
+    }
+  });
+
+  // Character counter + auto-save on typing
+  requirementsBox.addEventListener('input', () => {
+    const len = requirementsBox.value.length;
+    charCount.textContent = len + " characters";
+    localStorage.setItem('lexdraft_requirements', requirementsBox.value);
+  });
+
+  draftBox.addEventListener('input', () => {
+    localStorage.setItem('lexdraft_draft', draftBox.value);
+  });
+
+  document.getElementById('docType').addEventListener('change', (e) => {
+    localStorage.setItem('lexdraft_docType', e.target.value);
+  });
+
+  // Theme toggle + save
+  themeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    themeToggle.textContent = isDark ? "Light" : "Dark";
+    localStorage.setItem('lexdraft_theme', isDark ? 'dark' : 'light');
+  });
 
   btn.addEventListener('click', async () => {
-    const requirements = document.getElementById('requirements').value.trim();
+    const requirements = requirementsBox.value.trim();
     const docType = document.getElementById('docType').value;
     if (!requirements) {
       statusText.textContent = "Please enter requirements text.";
@@ -136,6 +212,8 @@
       });
       const data = await res.json();
       draftBox.value = data.draft || "";
+      localStorage.setItem('lexdraft_draft', draftBox.value);
+
       entitiesList.innerHTML = "";
       if (data.entities && data.entities.length > 0) {
         data.entities.forEach(([text, label]) => {
@@ -159,6 +237,10 @@
         aiSummary.textContent = "Draft generated from base template.";
       }
       statusText.textContent = "Draft ready.";
+
+      // Auto-scroll to draft
+      draftCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
     } catch (err) {
       console.error(err);
       statusText.textContent = "Unable to generate draft.";
@@ -171,6 +253,78 @@
   downloadBtn.addEventListener('click', () => {
     window.print();
   });
+
+  // Copy draft button
+  copyBtn.addEventListener('click', () => {
+    if (!draftBox.value.trim()) {
+      statusText.textContent = "No draft to copy.";
+      statusText.classList.add("text-danger");
+      return;
+    }
+    navigator.clipboard.writeText(draftBox.value).then(() => {
+      statusText.textContent = "Draft copied to clipboard.";
+      statusText.classList.remove("text-danger");
+    }).catch(() => {
+      statusText.textContent = "Unable to copy draft.";
+      statusText.classList.add("text-danger");
+    });
+  });
+
+  // Reset button
+  resetBtn.addEventListener('click', () => {
+    requirementsBox.value = "";
+    draftBox.value = "";
+    entitiesList.innerHTML = "";
+    statusText.textContent = "";
+    aiSummary.textContent = "";
+    document.getElementById('docType').value = "nda";
+    charCount.textContent = "0 characters";
+    document.getElementById('mic-status').textContent = "";
+    localStorage.removeItem('lexdraft_requirements');
+    localStorage.removeItem('lexdraft_draft');
+    localStorage.removeItem('lexdraft_docType');
+  });
+
+  // 🎤 Speech-to-text (clean, no repetition)
+  const micBtn = document.getElementById('mic-btn');
+  const micStatus = document.getElementById('mic-status');
+
+  let recognition = null;
+
+  if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SR();
+    recognition.lang = 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = false;  // only final text
+
+    recognition.onstart = () => {
+      micStatus.textContent = "Listening... speak clearly.";
+    };
+
+    recognition.onerror = (event) => {
+      micStatus.textContent = "Mic error: " + event.error;
+    };
+
+    recognition.onend = () => {
+      micStatus.textContent = "Stopped listening.";
+    };
+
+    recognition.onresult = (event) => {
+      let finalText = event.results[0][0].transcript;
+      requirementsBox.value = (requirementsBox.value + " " + finalText).trim();
+      const len = requirementsBox.value.length;
+      charCount.textContent = len + " characters";
+      localStorage.setItem('lexdraft_requirements', requirementsBox.value);
+    };
+
+    micBtn.addEventListener('click', () => {
+      try { recognition.start(); } catch (e) {}
+    });
+  } else {
+    micStatus.textContent = "Speech input not supported in this browser.";
+    micBtn.disabled = true;
+  }
 </script>
 
 </body>
